@@ -3,6 +3,4 @@ __pycache__/
 .venv/
 .env
 
-# Raw JSON can be large — comment this out if you want to commit it for
-# full reproducibility/transparency instead of just the final CSV.
-# data/raw/
+data/raw/
