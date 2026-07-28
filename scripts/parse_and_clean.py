@@ -1,7 +1,7 @@
 """
 Phase 3: Parse & Clean
 ------------------------
-Reads raw JSON files from data/raw/, normalizes fields across the two different API schemas (Greenhouse vs Lever).
+Reads raw JSON files from data/raw/, normalizes fields across the three different API schemas (Greenhouse vs Lever vs Ashby).
 Extracts structured signal from free-text job descriptions:
   - disclosed salary range (regex on common pay-transparency patterns)
   - skill mentions (keyword match against a curated skill list)
@@ -22,10 +22,10 @@ OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
 # skills list can be expanded as needed
 SKILLS = [
     # Programming Languages
-    "python", "java", "javascript", "typescript", "c", "c++", "c#", "go",
+    "python", "java", "javascript", "typescript", "c++", "c#", 
     "golang", "rust", "kotlin", "scala", "swift", "objective-c", "php",
-    "ruby", "perl", "r", "matlab", "bash", "shell", "powershell",
-    "html", "css", "sql", "nosql",
+    "ruby", "perl", "matlab", "bash", "shell", "powershell",
+    "html", "css", "sql", "nosql", "c language"
 
     # Frontend
     "react", "react.js", "next.js", "angular", "vue", "vue.js", "svelte",
@@ -35,7 +35,7 @@ SKILLS = [
     # Backend
     "node", "node.js", "express", "nestjs", "spring", "spring boot",
     "django", "flask", "fastapi", "laravel", "asp.net", ".net",
-    "gin", "fiber", "hibernate", "graphql", "rest", "rest api",
+    "fiber", "hibernate", "graphql", "rest", "rest api",
     "grpc", "microservices",
 
     # Databases
@@ -76,7 +76,7 @@ SKILLS = [
     # AI / Machine Learning
     "machine learning", "deep learning", "artificial intelligence",
     "computer vision", "nlp", "generative ai", "llm",
-    "transformers", "rag", "fine tuning", "prompt engineering",
+    "transformers", "fine tuning", "prompt engineering",
     "langchain", "llamaindex", "hugging face",
     "tensorflow", "keras", "pytorch", "xgboost",
     "lightgbm", "scikit-learn", "sklearn",
@@ -121,7 +121,7 @@ SKILLS = [
 
     # Architecture
     "design patterns", "system design",
-    "object-oriented programming", "oop",
+    "object-oriented programming", "oops",
     "functional programming",
 
     # Agile
@@ -251,6 +251,44 @@ def parse_lever(company: str, jobs: list):
         })
     return records
 
+def parse_ashby(company: str, jobs: list):
+    records = []
+    for job in jobs:
+        title = job.get("title", "")
+        content = strip_html(job.get("descriptionPlain", "") or job.get("descriptionHtml", ""))
+        location = job.get("location", "")
+        department = job.get("department", "") or job.get("team", "")
+
+        salary_low, salary_high = None, None
+        compensation = job.get("compensation")
+        if compensation:
+            for component in compensation.get("summaryComponents", []):
+                if component.get("compensationType") == "Salary":
+                    salary_low = component.get("minValue")
+                    salary_high = component.get("maxValue")
+                    break
+            if salary_low is None:
+                summary = compensation.get("scrapeableCompensationSalarySummary", "")
+                if summary:
+                    salary_low, salary_high = extract_salary(summary)
+
+        if salary_low is None:
+            salary_low, salary_high = extract_salary(content)
+
+        records.append({
+            "company": company,
+            "ats": "ashby",
+            "title": title,
+            "location": location,
+            "department": department,
+            "seniority": infer_seniority(title),
+            "salary_low": salary_low,
+            "salary_high": salary_high,
+            "skills": extract_skills(content),
+            "posted_date": job.get("publishedAt", ""),
+            "description_length": len(content),
+        })
+    return records
 
 def main():
     all_records = []
@@ -267,8 +305,10 @@ def main():
 
         if ats == "greenhouse":
             all_records.extend(parse_greenhouse(company, jobs))
-        else:
+        elif ats == "lever":
             all_records.extend(parse_lever(company, jobs))
+        else:
+            all_records.extend(parse_ashby(company, jobs))
 
     with open(OUT_PATH, "w") as f:
         json.dump(all_records, f, indent=2)

@@ -1,7 +1,7 @@
 """
 Phase 2: Collect Postings
 ---------------------------
-Pulls live job postings from Greenhouse and Lever public APIs for every company in the list. 
+Pulls live job postings from Greenhouse, Lever, and Ashby public APIs for every company in the list. 
 Saves raw JSON per company to data/raw/, and logs which companies succeeded/failed to a run report.
 
 Usage: python scripts/collect_postings.py
@@ -25,6 +25,7 @@ RAW_DIR.mkdir(parents=True, exist_ok=True)
 
 GREENHOUSE_URL = "https://boards-api.greenhouse.io/v1/boards/{token}/jobs?content=true"
 LEVER_URL = "https://api.lever.co/v0/postings/{token}?mode=json"
+ASHBY_URL = "https://api.ashbyhq.com/posting-api/job-board/{token}?includeCompensation=true"
 
 HEADERS = {"User-Agent": "jobs-postings-decoded-project/1.0"}
 TIMEOUT = 15
@@ -44,6 +45,12 @@ def fetch_lever(token: str):
     resp.raise_for_status()
     return resp.json()
 
+def fetch_ashby(token: str):
+    url = ASHBY_URL.format(token=token)
+    resp = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
+    resp.raise_for_status()
+    return resp.json().get("data", [])
+
 
 def main():
     results_log = []
@@ -55,8 +62,10 @@ def main():
         try:
             if ats == "greenhouse":
                 jobs = fetch_greenhouse(name)
-            else:
+            elif ats == "lever":
                 jobs = fetch_lever(name)
+            else:
+                jobs = fetch_ashby(name)
 
             with open(out_path, "w") as f:
                 json.dump(jobs, f)
